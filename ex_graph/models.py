@@ -66,15 +66,15 @@ class Model(torch.nn.Module):
         x, edge_index, batch = data.x, data.edge_index, data.batch
         edge_attr = None
 
-        x,x_score=self.conv1(x, edge_index, edge_attr, batch)
+        x,x_score1=self.conv1(x, edge_index, edge_attr, batch)
         x = F.relu(x)  # x: [69403, 89]  --> [69403, 128]
-        x, edge_index, edge_attr, batch = self.pool1(x,x_score, edge_index, edge_attr, batch) # x: [34769, 128]
+        x, edge_index, edge_attr, batch = self.pool1(x,x_score1, edge_index, edge_attr, batch) # x: [34769, 128]
         x1 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1) # x1: [256, 256]
 
         edge_attr=None
-        x,x_score=self.conv2(x, edge_index, edge_attr, batch)
+        x,x_score2=self.conv2(x, edge_index, edge_attr, batch)
         x = F.relu(x)
-        x, edge_index, edge_attr, batch = self.pool2(x,x_score, edge_index, edge_attr, batch)
+        x, edge_index, edge_attr, batch = self.pool2(x,x_score2, edge_index, edge_attr, batch)
         x2 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1) # x2: [256, 256]
 
         edge_attr=None
@@ -89,4 +89,4 @@ class Model(torch.nn.Module):
         x = F.relu(self.lin2(x))
         x = F.dropout(x, p=self.dropout_ratio, training=self.training)
         x = F.log_softmax(self.lin3(x), dim=-1)
-        return x
+        return x,x_score1,x_score2

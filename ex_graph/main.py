@@ -59,11 +59,13 @@ def train():
         for i, data in enumerate(train_loader):
             optimizer.zero_grad()
             data = data.to(args.device)
-            out = model(data)
+            out,x_score1,x_score2 = model(data)
             loss = F.nll_loss(out, data.y)
             loss.backward()
-            writer.add_scalars('drop ratio',{'layer1':model.conv1.SA.threshold.data.detach().cpu().numpy(),'layer2':model.conv2.SA.threshold.data.detach().cpu().numpy()},global_step=step)
+            # writer.add_scalars('drop ratio',{'layer1':model.conv1.SA.threshold.data.detach().cpu().numpy(),'layer2':model.conv2.SA.threshold.data.detach().cpu().numpy()},global_step=step)
             writer.add_scalar('loss',loss.item(),global_step=step)
+            writer.add_histogram('norm1',x_score1,global_step=step)
+            writer.add_histogram('norm2',x_score2,global_step=step)
             step+=1
             optimizer.step()
             loss_train += loss.item()
@@ -114,7 +116,7 @@ def compute_test(loader):
     loss_test = 0.0
     for data in loader:
         data = data.to(args.device)
-        out = model(data)
+        out,_,_ = model(data)
         pred = out.max(dim=1)[1]
         correct += pred.eq(data.y).sum().item()
         loss_test += F.nll_loss(out, data.y).item()
