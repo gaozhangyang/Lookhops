@@ -1,7 +1,7 @@
 authorName: Zhangyang Gao
 experimentName: ex_Mutagenicity
 debug: True
-trialConcurrency: 6
+trialConcurrency: 10
 maxExecDuration: 12h
 maxTrialNum: 300
 #choice: local, remote, pai
@@ -25,5 +25,5 @@ trial:
 
 localConfig:
   gpuIndices: "2"
-  maxTrialNumPerGpu: 6
+  maxTrialNumPerGpu: 10
   useActiveGpu: False

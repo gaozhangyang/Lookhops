@@ -1,7 +1,7 @@
 authorName: Zhangyang Gao
 experimentName: ex_ENZYMES
 debug: True
-trialConcurrency: 12
+trialConcurrency: 42
 maxExecDuration: 12h
 maxTrialNum: 600
 #choice: local, remote, pai
@@ -24,6 +24,6 @@ trial:
   gpuNum: 1
 
 localConfig:
-  gpuIndices: "1,2"
+  gpuIndices: "0,1,2,3,4,6,7"
   maxTrialNumPerGpu: 6
   useActiveGpu: False

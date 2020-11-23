@@ -29,15 +29,16 @@ def get_args():
     parser.add_argument('--structure_learning', type=bool, default=False, help='whether perform structure learning')
     parser.add_argument('--pooling_ratio', type=float, default=0.87, help='pooling ratio')
     parser.add_argument('--edge_ratio', type=float, default=0.4, help='pooling ratio')
-    parser.add_argument('--dropout_ratio', type=float, default=0.0, help='dropout ratio')
+    parser.add_argument('--dropout_ratio', type=float, default=0, help='dropout ratio')
     parser.add_argument('--lamb', type=float, default=1.0, help='trade-off parameter')
-    parser.add_argument('--dataset', type=str, default='ENZYMES', help='DD/PROTEINS/NCI1/NCI109/Mutagenicity/ENZYMES')
+    parser.add_argument('--dataset', type=str, default='FRANKENSTEIN', help='DD/PROTEINS/NCI1/NCI109/Mutagenicity/ENZYMES/FRANKENSTEIN')
     parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
     parser.add_argument('--epochs', type=int, default=1000, help='maximum number of epochs')
     parser.add_argument('--patience', type=int, default=100, help='patience for early stopping')
     parser.add_argument('--conv',default='LiCheb',help='GCN/ChebConv/LiCheb/LeCheb/Mix')  # ChebConv
     parser.add_argument('--pool',default='MAtt',help='HGPSL/MAtt')
-    parser.add_argument('--K',default=2,type=int)
+    parser.add_argument('--K',default=2,type=int) 
+    parser.add_argument('--num_layers',default=2,type=int)
     args = parser.parse_args()
     return args
 
@@ -46,8 +47,10 @@ def get_args():
 
 def train():
     min_loss = 1e10
+    max_acc=0
     patience_cnt = 0
     val_loss_values = []
+    val_acc_values = []
     best_epoch = 0
 
     t = time.time()
@@ -59,13 +62,13 @@ def train():
         for i, data in enumerate(train_loader):
             optimizer.zero_grad()
             data = data.to(args.device)
-            out,x_score1,x_score2 = model(data)
+            out = model(data)
             loss = F.nll_loss(out, data.y)
             loss.backward()
             # writer.add_scalars('drop ratio',{'layer1':model.conv1.SA.threshold.data.detach().cpu().numpy(),'layer2':model.conv2.SA.threshold.data.detach().cpu().numpy()},global_step=step)
             writer.add_scalar('loss',loss.item(),global_step=step)
-            writer.add_histogram('norm1',x_score1,global_step=step)
-            writer.add_histogram('norm2',x_score2,global_step=step)
+            # writer.add_histogram('norm1',x_score1,global_step=step)
+            # writer.add_histogram('norm2',x_score2,global_step=step)
             step+=1
             optimizer.step()
             loss_train += loss.item()
@@ -82,6 +85,7 @@ def train():
         logging.info(outs)
 
         val_loss_values.append(loss_val)
+        val_acc_values.append(acc_val)
         torch.save(model.state_dict(), res/'{}.pth'.format(epoch))
         if val_loss_values[-1] < min_loss:
             min_loss = val_loss_values[-1]
@@ -89,6 +93,13 @@ def train():
             patience_cnt = 0
         else:
             patience_cnt += 1
+
+        # if val_acc_values[-1] > max_acc:
+        #     max_acc = val_acc_values[-1]
+        #     best_epoch = epoch
+        #     patience_cnt = 0
+        # else:
+        #     patience_cnt += 1
 
         if patience_cnt == args.patience:
             break
@@ -116,7 +127,7 @@ def compute_test(loader):
     loss_test = 0.0
     for data in loader:
         data = data.to(args.device)
-        out,_,_ = model(data)
+        out = model(data)
         pred = out.max(dim=1)[1]
         correct += pred.eq(data.y).sum().item()
         loss_test += F.nll_loss(out, data.y).item()
