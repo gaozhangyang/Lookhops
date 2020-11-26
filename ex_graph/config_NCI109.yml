@@ -3,7 +3,7 @@ experimentName: ex_NCI109
 debug: True
 trialConcurrency: 10
 maxExecDuration: 12h
-maxTrialNum: 300
+maxTrialNum: 600
 #choice: local, remote, pai
 trainingServicePlatform: local
 searchSpacePath: search_space_NCI109.json
@@ -24,6 +24,6 @@ trial:
   gpuNum: 1
 
 localConfig:
-  gpuIndices: "4"
+  gpuIndices: "7"
   maxTrialNumPerGpu: 10
   useActiveGpu: False

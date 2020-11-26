@@ -3,7 +3,7 @@ experimentName: ex_Mutagenicity
 debug: True
 trialConcurrency: 10
 maxExecDuration: 12h
-maxTrialNum: 300
+maxTrialNum: 600
 #choice: local, remote, pai
 trainingServicePlatform: local
 searchSpacePath: search_space_Mut.json
@@ -24,6 +24,6 @@ trial:
   gpuNum: 1
 
 localConfig:
-  gpuIndices: "2"
+  gpuIndices: "5"
   maxTrialNumPerGpu: 10
   useActiveGpu: False

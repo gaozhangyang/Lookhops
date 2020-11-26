@@ -6,6 +6,7 @@ from torch.nn.functional import threshold
 from torch_scatter.scatter import scatter_mean
 from torch_sparse.tensor import to
 from sparse_softmax import Sparsemax
+# from sparsemax import Sparsemax
 from torch.nn import Parameter
 from torch_geometric.data import Data
 from torch_geometric.nn.conv import MessagePassing
@@ -20,6 +21,21 @@ from torch_geometric.typing import OptTensor
 from torch.nn import Linear
 from torch_geometric.nn.inits import glorot, zeros
 import networkx as nx
+
+def k_hop_edges(edge_index,num_nodes,K):
+    n = num_nodes
+    edge_index,_= coalesce(edge_index, None, n, n)
+    value = edge_index.new_ones((edge_index.size(1),), dtype=torch.float)
+    # value = scatter_softmax(value,edge_index[0])
+
+    new_edge_index = edge_index.clone()
+    new_edge_value = value.clone()
+    for i in range(K-1):
+        new_edge_index, new_edge_value = spspmm(new_edge_index, new_edge_value, edge_index, value, n, n, n)
+        new_edge_index, new_edge_value = coalesce(new_edge_index, new_edge_value, n, n)
+
+    # edge_index = torch.cat([edge_index, index], dim=1)
+    return new_edge_index, new_edge_value
 
 
 class TwoHopNeighborhood(object):
@@ -143,13 +159,6 @@ class SparseActivate(nn.Module):
         return merged_value
 
 
-
-# def sparseFunction(x, s,batch, activation=torch.relu,f=torch.sigmoid):
-#     mean=torch.mean(x)
-#     var=torch.var(x)
-#     normed_value=(x-mean)/var
-#     mask=activation(normed_value-f(s))
-#     return (mask*var+mean)*(mask>0).float()
 
 class LiCheb(MessagePassing):
     def __init__(self, in_channels, out_channels, K, normalization='sym',
@@ -395,24 +404,66 @@ class NodeInformationScore(MessagePassing):
 
 
 class AttPool(torch.nn.Module):
-    def __init__(self, ratio=0.8):
+    def __init__(self, k,ratio=0.8,edge_ratio=0.8):
         super(AttPool, self).__init__()
+        self.k=k
         self.ratio = ratio
+        self.edge_ratio=edge_ratio
 
         self.sparse_attention = Sparsemax()
         self.neighbor_augment = TwoHopNeighborhood()
         self.calc_information_score = NodeInformationScore()
+        self.idx=1
 
     def forward(self, x, x_score, edge_index, edge_attr, batch=None):
+        n=x.shape[0]
+        edge_index, _ = remove_self_loops(edge_index)
+
         if batch is None:
             batch = edge_index.new_zeros(x.size(0))
 
         # Graph Pooling
         perm = topk(x_score.view(-1), self.ratio, batch)
+        ## the best model
+        induced_edge_index, induced_edge_attr = filter_adj(edge_index, edge_attr, perm, num_nodes=x_score.size(0))
+
+        if edge_index.shape[1]>0:
+            row,col=edge_index
+            S=torch.exp(-torch.norm(x[row]-x[col],dim=1))
+            th=torch.sort(S,descending=True).values[int(self.edge_ratio*len(S))]
+            select=(S>th)
+            edge_index=edge_index[:,select]
+        
+
+        ## for learnable pooling
         # perm=torch.where(x_score.view(-1)>0)[0] # for learnable pooling
+
+        ## A^k +sparse_attention
+        # edge_index,edge_attr=k_hop_edges(edge_index,n,self.k)
+        # edge_attr=self.sparse_attention(edge_attr,batch[edge_index[0]])
+        # select=edge_attr.nonzero().view(-1)
+        # induced_edge_index, induced_edge_attr = filter_adj(edge_index[:,select], edge_attr[select], perm, num_nodes=x_score.size(0))
+
+        ## A^k*Similarity+sparse_attention
+        # if edge_index.shape[1]>0:
+        #     edge_index,random_walk_score=k_hop_edges(edge_index,n,self.k)
+        #     row,col=edge_index
+        #     S=torch.exp(-torch.norm(x[row]-x[col],dim=1))*random_walk_score
+        #     if batch[row].unique().shape[0]>0:
+        #         sparse_S=self.sparse_attention(S,batch[row])
+        #         select=sparse_S.nonzero().view(-1)
+        #     else:
+        #         select=torch.tensor([],device=x.device)
+        # else:
+        #     select=torch.tensor([],device=x.device)
+
+        # new_edge_index, _ = add_self_loops(edge_index,num_nodes=n)
+        # select=torch.hstack([select,torch.arange(new_edge_index.shape[1]-x.size(0),new_edge_index.shape[1],device=x.device)]).long()
+        # induced_edge_index, induced_edge_attr = filter_adj(new_edge_index[:,select], edge_attr, perm, num_nodes=n)
+
+        
         x = x[perm]
         batch = batch[perm]
-        induced_edge_index, induced_edge_attr = filter_adj(edge_index, edge_attr, perm, num_nodes=x_score.size(0))
         return x, induced_edge_index, induced_edge_attr, batch
 
 
@@ -496,7 +547,7 @@ class HGPSLPool(torch.nn.Module):
             hop_edge_attr = hop_data.edge_attr
             new_edge_index, new_edge_attr = filter_adj(hop_edge_index, hop_edge_attr, perm, num_nodes=score.size(0)) # TODO
 
-            new_edge_index, new_edge_attr = add_remaining_self_loops(new_edge_index, new_edge_attr, 0, x.size(0))
+            new_edge_index, new_edge_attr = add_remaining_self_loops(new_edge_index, new_edge_attr, 0, x.size(0)) # A^k k阶邻接矩阵
             # row, col = new_edge_index
             # weights = (torch.cat([x[row], x[col]], dim=1) * self.att).sum(dim=-1)
             # weights = F.leaky_relu(weights, self.negative_slop) + new_edge_attr * self.lamb
@@ -517,4 +568,3 @@ class HGPSLPool(torch.nn.Module):
 
 
         return x, new_edge_index, new_edge_attr, batch
-

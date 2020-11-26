@@ -107,6 +107,7 @@ import torch.nn as nn
 class Model(torch.nn.Module):
     def __init__(self, args):
         super(Model, self).__init__()
+        self.K=args.K
         self.args = args
         self.num_features = args.num_features
         self.nhid = args.nhid
@@ -127,7 +128,7 @@ class Model(torch.nn.Module):
             ))
         
         if args.pool=='MAtt':
-            self.pool = AttPool(self.pooling_ratio)
+            self.pool = AttPool(self.K,self.pooling_ratio,self.edge_ratio)
             # self.pool2 = AttPool(self.pooling_ratio)
 
         self.lin1 = torch.nn.Linear(self.nhid * 2, self.nhid)

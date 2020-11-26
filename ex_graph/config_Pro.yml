@@ -1,9 +1,9 @@
 authorName: Zhangyang Gao
 experimentName: ex_PROTEINS
 debug: True
-trialConcurrency: 10
+trialConcurrency: 60
 maxExecDuration: 12h
-maxTrialNum: 300
+maxTrialNum: 600
 #choice: local, remote, pai
 trainingServicePlatform: local
 searchSpacePath: search_space_Pro.json
@@ -24,6 +24,6 @@ trial:
   gpuNum: 1
 
 localConfig:
-  gpuIndices: "7"
+  gpuIndices: "0,3,4,5,6,7"
   maxTrialNumPerGpu: 10
   useActiveGpu: False
