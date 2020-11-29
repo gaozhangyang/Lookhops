@@ -34,7 +34,7 @@ def get_args():
     parser.add_argument('--dataset', type=str, default='PROTEINS', help='DD/PROTEINS/NCI1/NCI109/Mutagenicity/ENZYMES/FRANKENSTEIN')
     parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
     parser.add_argument('--epochs', type=int, default=1000, help='maximum number of epochs')
-    parser.add_argument('--patience', type=int, default=100, help='patience for early stopping')
+    parser.add_argument('--patience', type=int, default=50, help='patience for early stopping')
     parser.add_argument('--conv',default='LiCheb',help='GCN/ChebConv/LiCheb/LeCheb/Mix')  # ChebConv
     parser.add_argument('--pool',default='MAtt',help='HGPSL/MAtt')
     parser.add_argument('--K',default=1,type=int)

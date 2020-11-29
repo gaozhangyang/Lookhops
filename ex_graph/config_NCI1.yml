@@ -1,9 +1,9 @@
 authorName: Zhangyang Gao
 experimentName: ex_NCI1
 debug: True
-trialConcurrency: 10
+trialConcurrency: 20
 maxExecDuration: 12h
-maxTrialNum: 600
+maxTrialNum: 100
 #choice: local, remote, pai
 trainingServicePlatform: local
 searchSpacePath: search_space_NCI1.json
@@ -24,6 +24,6 @@ trial:
   gpuNum: 1
 
 localConfig:
-  gpuIndices: "6"
+  gpuIndices: "0,1"
   maxTrialNumPerGpu: 10
   useActiveGpu: False

@@ -1,9 +1,9 @@
 authorName: Zhangyang Gao
 experimentName: ex_FRANKENSTEIN
 debug: True
-trialConcurrency: 10
+trialConcurrency: 15
 maxExecDuration: 12h
-maxTrialNum: 600
+maxTrialNum: 100
 #choice: local, remote, pai
 trainingServicePlatform: local
 searchSpacePath: search_space_FRANKENSTEIN.json
@@ -24,6 +24,6 @@ trial:
   gpuNum: 1
 
 localConfig:
-  gpuIndices: "4"
-  maxTrialNumPerGpu: 10
+  gpuIndices: "7"
+  maxTrialNumPerGpu: 15
   useActiveGpu: False

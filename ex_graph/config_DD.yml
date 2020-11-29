@@ -1,9 +1,9 @@
 authorName: Zhangyang Gao
 experimentName: ex_DD
 debug: True
-trialConcurrency: 10
+trialConcurrency: 30
 maxExecDuration: 12h
-maxTrialNum: 300
+maxTrialNum: 200
 #choice: local, remote, pai
 trainingServicePlatform: local
 searchSpacePath: search_space_DD.json
@@ -24,6 +24,6 @@ trial:
   gpuNum: 1
 
 localConfig:
-  gpuIndices: "0"
-  maxTrialNumPerGpu: 10
+  gpuIndices: "0,3,4,5,6,7"
+  maxTrialNumPerGpu: 5
   useActiveGpu: False

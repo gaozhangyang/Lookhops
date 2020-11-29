@@ -1,0 +1,18 @@
+name: ML
+channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/msys2/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
+  - defaults
+dependencies:
+  - python=3.6
+  - cudatoolkit=10.2
+  - pygrib
+  - pyvista
+  - basemap
+  - igl
+  - faiss-gpu
+prefix: /usr/data/software/Anaconda/envs/ML
+

@@ -417,7 +417,7 @@ class AttPool(torch.nn.Module):
 
     def forward(self, x, x_score, edge_index, edge_attr, batch=None):
         n=x.shape[0]
-        edge_index, _ = remove_self_loops(edge_index)
+        # edge_index, _ = remove_self_loops(edge_index)
 
         if batch is None:
             batch = edge_index.new_zeros(x.size(0))
