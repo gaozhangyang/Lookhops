@@ -4,9 +4,8 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch_geometric.nn import global_mean_pool as gap
 from torch_geometric.nn import global_max_pool as gmp
-from torch_geometric.nn import GCNConv,ChebConv
 import scipy
-from layers import GCN, HGPSLPool,LiCheb,LeCheb,AttPool
+from layers import GCN, HGPSLPool,LiCheb,LeCheb,AttPool,ChebConv
 import collections
 import torch.nn as nn
 
@@ -123,8 +122,14 @@ class Model(torch.nn.Module):
 
         if args.conv=='LiCheb':
             self.convs = nn.Sequential(collections.OrderedDict(
-                [('conv1',LiCheb(self.num_features,self.nhid,K=args.K))]+
-                [('conv{}'.format(i),LiCheb(self.nhid,self.nhid,K=args.K)) for i in range(2,self.num_layers+1)]
+                [('conv1',LiCheb(self.num_features,self.nhid,K=args.K,decoupled=args.decoupled))]+
+                [('conv{}'.format(i),LiCheb(self.nhid,self.nhid,K=args.K,decoupled=args.decoupled)) for i in range(2,self.num_layers+1)]
+            ))
+        
+        if args.conv=='ChebConv':
+            self.convs = nn.Sequential(collections.OrderedDict(
+                [('conv1',ChebConv(self.num_features,self.nhid,K=args.K))]+
+                [('conv{}'.format(i),ChebConv(self.nhid,self.nhid,K=args.K)) for i in range(2,self.num_layers+1)]
             ))
         
         if args.pool=='MAtt':

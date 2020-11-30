@@ -63,7 +63,6 @@ class TwoHopNeighborhood(object):
     def __repr__(self):
         return '{}()'.format(self.__class__.__name__)
 
-
 class GCN(MessagePassing):
     def __init__(self, in_channels, out_channels, cached=False, bias=True, **kwargs):
         super(GCN, self).__init__(aggr='add', **kwargs)
@@ -159,10 +158,111 @@ class SparseActivate(nn.Module):
         return merged_value
 
 
+class ChebConv(MessagePassing):
+    def __init__(self, in_channels, out_channels, K, normalization='sym',
+                 bias=True, **kwargs):
+        super(ChebConv, self).__init__(aggr='add', **kwargs)
+
+        assert K > 0
+        assert normalization in [None, 'sym', 'rw'], 'Invalid normalization'
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.normalization = normalization
+        self.weight = Parameter(torch.Tensor(K*in_channels, out_channels))
+        self.node_att = nn.Linear(K*in_channels,1)
+        self.K=K
+
+        if bias:
+            self.bias = Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        glorot(self.weight)
+        zeros(self.bias)
+
+    def __norm__(self, edge_index, num_nodes: Optional[int],
+                 edge_weight: OptTensor, normalization: Optional[str],
+                 lambda_max, dtype: Optional[int] = None,
+                 batch: OptTensor = None):
+
+        edge_index, edge_weight = remove_self_loops(edge_index, edge_weight)
+
+        edge_index, edge_weight = get_laplacian(edge_index, edge_weight,
+                                                normalization, dtype,
+                                                num_nodes)
+
+        if batch is not None and lambda_max.numel() > 1:
+            lambda_max = lambda_max[batch[edge_index[0]]]
+
+        edge_weight = (2.0 * edge_weight) / lambda_max
+        edge_weight.masked_fill_(edge_weight == float('inf'), 0)
+
+        edge_index, edge_weight = add_self_loops(edge_index, edge_weight,
+                                                 fill_value=-1.,
+                                                 num_nodes=num_nodes)
+        assert edge_weight is not None
+
+        return edge_index, edge_weight
+
+    def forward(self, x, edge_index, edge_weight: OptTensor = None,
+                batch: OptTensor = None, lambda_max: OptTensor = None):
+        """"""
+        if self.normalization != 'sym' and lambda_max is None:
+            raise ValueError('You need to pass `lambda_max` to `forward() in`'
+                             'case the normalization is non-symmetric.')
+
+        if lambda_max is None:
+            lambda_max = torch.tensor(2.0, dtype=x.dtype, device=x.device)
+        if not isinstance(lambda_max, torch.Tensor):
+            lambda_max = torch.tensor(lambda_max, dtype=x.dtype,
+                                      device=x.device)
+        assert lambda_max is not None
+
+        edge_index, norm = self.__norm__(edge_index, x.size(self.node_dim),
+                                         edge_weight, self.normalization,
+                                         lambda_max, dtype=x.dtype,
+                                         batch=batch)
+
+        Tx_0 = x
+        Tx_1 = x  # Dummy.
+        out = [Tx_0]
+        # out = torch.matmul(Tx_0, self.weight[0])
+
+        # propagate_type: (x: Tensor, norm: Tensor)
+        if self.K> 1:
+            Tx_1 = self.propagate(edge_index, x=x, norm=norm, size=None)
+            # out = out + torch.matmul(Tx_1, self.weight[1])
+            out.append(Tx_1)
+
+        for k in range(2, self.K):
+            Tx_2 = self.propagate(edge_index, x=Tx_1, norm=norm, size=None)
+            Tx_2 = 2. * Tx_2 - Tx_0
+            # out = out + torch.matmul(Tx_2, self.weight[k])
+            out.append(Tx_2)
+            Tx_0, Tx_1 = Tx_1, Tx_2
+
+        out=torch.stack(out).permute(1,0,2).contiguous()
+
+        node_score=self.node_att(out.reshape(-1,self.K*self.in_channels))
+        out=torch.matmul(out.reshape(-1,self.K*self.in_channels),self.weight)
+        return out,node_score
+
+    def message(self, x_j, norm):
+        return norm.view(-1, 1) * x_j
+
+    def __repr__(self):
+        return '{}({}, {}, K={}, normalization={})'.format(
+            self.__class__.__name__, self.in_channels, self.out_channels,
+            self.weight.size(0), self.normalization)
+
 
 class LiCheb(MessagePassing):
     def __init__(self, in_channels, out_channels, K, normalization='sym',
-                 bias=True, **kwargs):
+                 bias=True,decoupled=True, **kwargs):
         super(LiCheb, self).__init__(aggr='add', **kwargs)
 
         assert K > 0
@@ -172,6 +272,7 @@ class LiCheb(MessagePassing):
         self.out_channels = out_channels
         self.normalization = normalization
         self.K=K
+        self.decoupled=decoupled
         self.fc = Linear(in_channels,out_channels)
         self.att_w = Parameter(torch.Tensor(K, out_channels))
         self.att_bias = Parameter(torch.Tensor(out_channels))
@@ -254,8 +355,17 @@ class LiCheb(MessagePassing):
         node_score=self.node_att(out.permute(1,0,2).contiguous().view(-1,self.K*self.out_channels))
         
         out=torch.sum(self.att_w.view(self.K,1,self.out_channels)*out,dim=0)+self.att_bias.view(1,self.out_channels)
-        out=out/torch.norm(out,dim=1,keepdim=True)
+        if self.decoupled:
+            out=out/torch.norm(out,dim=1,keepdim=True)
+            
         out=out*node_score
+
+        # if self.decoupled:
+        #     norm=torch.norm(out,dim=1,keepdim=True)
+        #     out=out*node_score
+        #     node_score=node_score*norm
+        # else:   
+        #     out=out*node_score
 
         return out,node_score
 
@@ -494,7 +604,6 @@ class InformationScore(MessagePassing):
         return aggr_out
 
 
-    
 class HGPSLPool(torch.nn.Module):
     def __init__(self, in_channels, ratio=0.8, sample=False, sparse=False, sl=True, lamb=1.0, negative_slop=0.2):
         super(HGPSLPool, self).__init__()
