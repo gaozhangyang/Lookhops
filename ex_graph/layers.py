@@ -539,8 +539,8 @@ class AttPool(torch.nn.Module):
 
         if edge_index.shape[1]>0:
             row,col=edge_index
-            S=torch.exp(-torch.norm(x[row]-x[col],dim=1))
-            th=torch.sort(S,descending=True).values[int(self.edge_ratio*len(S))]
+            S=torch.exp(torch.norm(x[row]-x[col],dim=1))
+            th=torch.sort(S,descending=True).values[int(self.edge_ratio*(len(S)-1))]
             select=(S>th)
             edge_index=edge_index[:,select]
         

@@ -3,8 +3,6 @@ import glob
 import os
 import time
 
-import numpy as np
-import random
 import torch
 import torch.nn.functional as F
 from models import Model
@@ -14,28 +12,9 @@ from torch_geometric.datasets import TUDataset
 import logging
 from pathlib import Path
 import json
-import nni
 import time
 import datetime
 from torch.utils.tensorboard import SummaryWriter
-
-def SetSeed(seed,det=True):
-    """function used to set a random seed
-    Arguments:
-        seed {int} -- seed number, will set to torch, random and numpy
-    """
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    # torch.backends.cudnn.deterministic = True
-    # if det:
-    #     torch.backends.cudnn.deterministic = True
-    #     torch.backends.cudnn.benchmark = False
-
-# SetSeed(777)
-
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -61,7 +40,6 @@ def get_args():
     parser.add_argument('--num_layers',default=4,type=int)
     parser.add_argument('--decoupled',default=True)
     parser.add_argument('--ex_name',default='debug')
-    parser.add_argument('--N',default=1)
     args = parser.parse_args()
     return args
 
@@ -102,7 +80,6 @@ def train():
         outs='Epoch: {:04d}'.format(epoch + 1)+'\tloss_train: {:.6f}'.format(loss_train)+\
               '\tacc_train: {:.6f}'.format(acc_train)+ '\tloss_val: {:.6f}'.format(loss_val)+\
               '\tacc_val: {:.6f}'.format(acc_val)+'\ttime: {:.6f}s'.format(time.time() - t)
-        nni.report_intermediate_result(-loss_val) 
         print(outs)
         logging.info(outs)
 
@@ -165,7 +142,6 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(args.seed)
-    # SetSeed(args.seed)
 
     time_stamp = datetime.datetime.now()+datetime.timedelta(hours=8)
     config['ex_name'] = time_stamp.strftime('%Y.%m.%d-%H:%M:%S')+nni.get_trial_id()
@@ -214,7 +190,6 @@ if __name__ == '__main__':
 
 
     # Model training
-    # SetSeed(args.seed)
     best_model = train()
     # Restore best model for test set
     model.load_state_dict(torch.load(res/'{}.pth'.format(best_model)))
@@ -222,4 +197,3 @@ if __name__ == '__main__':
     outs='Test set results, loss = {:.6f}, accuracy = {:.6f}'.format(test_loss, test_acc)
     print(outs)
     logging.info(outs)
-    nni.report_final_result(test_acc)

@@ -134,3 +134,4 @@ mnist_ico4.gzip
 rainfull*/
 *.nc
 data*/
+*.pth

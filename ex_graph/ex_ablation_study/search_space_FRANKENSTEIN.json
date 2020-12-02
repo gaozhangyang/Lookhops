@@ -1,0 +1,10 @@
+{
+    "K":{"_type":"choice","_value":[4]},
+    "num_layers":{"_type":"choice","_value":[3]},
+    "pooling_ratio":{"_type":"choice","_value":[0.881023822]},
+    "edge_ratio":{"_type":"choice","_value":[1]},
+    "seed":{"_type":"choice","_value":[777]},
+    "conv":{"_type":"choice","_value":["ChebConv","LiCheb"]},
+    "decoupled":{"_type":"choice","_value":[false,true]},
+    "dataset":{"_type":"choice","_value":["FRANKENSTEIN"]}
+} 
