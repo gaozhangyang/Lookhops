@@ -1,9 +1,0 @@
-{
-    "K":{"_type":"choice","_value":[3]},
-    "num_layers":{"_type":"choice","_value":[5]},
-    "pooling_ratio":{"_type":"choice","_value":[0.632026586]},
-    "edge_ratio":{"_type":"choice","_value":[0.945543677]},
-    "seed":{"_type":"choice","_value":[777]},
-    "N":{"_type":"choice","_value":[1,2,3,4,5,6,7,8,9,10]},
-    "dataset":{"_type":"choice","_value":["NCI1"]}
-} 

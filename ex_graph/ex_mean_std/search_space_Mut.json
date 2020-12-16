@@ -1,9 +1,0 @@
-{
-    "K":{"_type":"choice","_value":[2]},
-    "num_layers":{"_type":"choice","_value":[2]},
-    "pooling_ratio":{"_type":"choice","_value":[0.426631657]},
-    "edge_ratio":{"_type":"choice","_value":[0.845983]},
-    "seed":{"_type":"choice","_value":[777]},
-    "N":{"_type":"choice","_value":[1,2,3,4,5,6,7,8,9,10]},
-    "dataset":{"_type":"choice","_value":["Mutagenicity"]}
-} 

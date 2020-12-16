@@ -1,5 +1,0 @@
-seed,num_layers,pooling_ratio,K,conv,edge_ratio,dataset,id,decoupled,reward
-777,2,0.426631657,2,ChebConv,0.845983,Mutagenicity,IVXZg,False,0.7954022988505747
-777,2,0.426631657,2,ChebConv,0.845983,Mutagenicity,AET0p,True,0.8045977011494253
-777,2,0.426631657,2,LiCheb,0.845983,Mutagenicity,geJBc,False,0.6873563218390805
-777,2,0.426631657,2,LiCheb,0.845983,Mutagenicity,IdbIU,True,0.8367816091954023

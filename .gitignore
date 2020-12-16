@@ -135,3 +135,7 @@ rainfull*/
 *.nc
 data*/
 *.pth
+*.csv
+*.yml
+*.json
+*.txt
