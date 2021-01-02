@@ -9,6 +9,7 @@ from torch.nn import Linear
 from torch_scatter import scatter_add
 from torch_geometric.utils import softmax, add_remaining_self_loops
 from torch_geometric.nn.inits import uniform
+import torch.nn as nn
 
 
 #######################################################
@@ -355,38 +356,6 @@ class ASAPooling(torch.nn.Module):
 #######################################################
 #######################################################
 ######################   LookHops   ###################
-# class LookHopsPool(torch.nn.Module):
-#     def __init__(self, k,ratio=0.8,edge_ratio=0.8):
-#         super(LookHopsPool, self).__init__()
-#         self.k=k
-#         self.ratio = ratio
-#         self.edge_ratio=edge_ratio
-#         self.idx=1
-
-#     def forward(self, x, x_score, edge_index, edge_attr, batch=None):
-#         n=x.shape[0]
-
-#         if batch is None:
-#             batch = edge_index.new_zeros(x.size(0))
-
-#         # Graph Pooling
-#         perm = topk(x_score.view(-1), self.ratio, batch)
-#         ## the best model
-#         induced_edge_index, induced_edge_attr = filter_adj(edge_index, edge_attr, perm, num_nodes=x.shape[0])
-
-#         if edge_index.shape[1]>0:
-#             row,col=edge_index
-#             S=torch.exp(torch.norm(x[row]-x[col],dim=1))
-#             th=torch.sort(S,descending=True).values[int(self.edge_ratio*(len(S)-1))]
-#             select=(S>th)
-#             edge_index=edge_index[:,select]
-        
-#         x = x[perm]
-#         batch = batch[perm]
-#         return x, induced_edge_index, induced_edge_attr, batch
-
-
-############ add structure learning
 class LookHopsPool(torch.nn.Module):
     def __init__(self, k,ratio=0.8,edge_ratio=0.8):
         super(LookHopsPool, self).__init__()
@@ -395,7 +364,7 @@ class LookHopsPool(torch.nn.Module):
         self.edge_ratio=edge_ratio
         self.idx=1
 
-    def forward(self, x, x_score, edge_index, edge_attr, batch, edge, D):
+    def forward(self, x, x_score, edge_index, edge_attr, batch=None):
         n=x.shape[0]
 
         if batch is None:
@@ -403,8 +372,11 @@ class LookHopsPool(torch.nn.Module):
 
         # Graph Pooling
         perm = topk(x_score.view(-1), self.ratio, batch)
-        ## the best model
+        
         induced_edge_index, induced_edge_attr = filter_adj(edge_index, edge_attr, perm, num_nodes=x.shape[0])
+        # isolate_mask=(perm.view(-1,1)==induced_edge_index.view(-1).unique()).sum(dim=1)>0
+        # perm = perm[isolate_mask]
+        # induced_edge_index, induced_edge_attr = filter_adj(edge_index, edge_attr, perm, num_nodes=x.shape[0])
 
         if edge_index.shape[1]>0:
             row,col=edge_index
@@ -416,3 +388,45 @@ class LookHopsPool(torch.nn.Module):
         x = x[perm]
         batch = batch[perm]
         return x, induced_edge_index, induced_edge_attr, batch
+
+
+# ############ add structure learning
+# class LookHopsPool(torch.nn.Module):
+#     def __init__(self, k, out_channels,ratio=0.8,edge_ratio=0.8):
+#         super(LookHopsPool, self).__init__()
+#         self.k=k
+#         self.ratio = ratio
+#         self.edge_ratio=edge_ratio
+#         self.idx=1
+#         self.node_att = nn.Linear(k*out_channels,1)
+#         self.edge_att = nn.Linear(k*out_channels*2,1)
+#         self.alpha = nn.Parameter(torch.tensor(1.0))
+
+#     def forward(self, x, neighbor_info, edge_index, edge_dis, batch):
+#         n=x.shape[0]
+
+#         if batch is None:
+#             batch = edge_index.new_zeros(x.size(0))
+        
+#         x_score = self.node_att(neighbor_info)
+#         x=x*x_score
+
+#         # Graph Pooling
+#         perm = topk(x_score.view(-1), self.ratio, batch)
+#         induced_edge_index, induced_edge_dis = filter_adj(edge_index, edge_dis, perm, num_nodes=x.shape[0])
+#         x = x[perm]
+#         batch = batch[perm]
+#         # neighbor_info = neighbor_info[perm]
+#         # row,col=induced_edge_index
+#         induced_edge_weight = torch.exp(-self.alpha*induced_edge_dis)
+#         if torch.isnan(induced_edge_weight).any():
+#             print('NO')
+
+#         # if edge_index.shape[1]>0:
+#         #     row,col=edge_index
+#         #     S=torch.exp(torch.norm(x[row]-x[col],dim=1))
+#         #     th=torch.sort(S,descending=True).values[int(self.edge_ratio*(len(S)-1))]
+#         #     select=(S>th)
+#         #     edge_index=edge_index[:,select]
+        
+#         return x, induced_edge_index, induced_edge_weight,induced_edge_dis, batch

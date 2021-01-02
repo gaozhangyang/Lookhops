@@ -313,6 +313,107 @@ class ChebConv(MessagePassing):
             self.__class__.__name__, self.in_channels, self.out_channels,
             self.weight.size(0), self.normalization)
 
+class MixhopConv(MessagePassing):
+    def __init__(self, in_channels, out_channels, K,decoupled, normalization='sym',
+                 bias=True, **kwargs):
+        super(MixhopConv, self).__init__(aggr='add', **kwargs)
+
+        assert K > 0
+        assert normalization in [None, 'sym', 'rw'], 'Invalid normalization'
+        
+        self.decoupled=decoupled
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.normalization = normalization
+        self.hidden=out_channels//K
+        self.weight=Parameter(torch.Tensor(K*in_channels,out_channels))
+
+        self.K=K
+
+        if bias:
+            self.bias = Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+
+        self.reset_parameters()
+
+
+    def reset_parameters(self):
+        glorot(self.weight)
+        zeros(self.bias)
+
+    def __norm__(self, edge_index, num_nodes: Optional[int],
+                 edge_weight: OptTensor, normalization: Optional[str],
+                 lambda_max, dtype: Optional[int] = None,
+                 batch: OptTensor = None):
+
+        row, col = edge_index[0], edge_index[1]
+        edge_weight = torch.ones(row.shape[0],device=row.device)
+        deg = scatter_add(edge_weight, row, dim=0, dim_size=num_nodes)
+
+        # Compute A_norm = -D^{-1/2} A D^{-1/2}.
+        deg_inv_sqrt = deg.pow_(-0.5)
+        deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float('inf'), 0)
+        edge_weight = deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
+
+        assert edge_weight is not None
+
+        return edge_index, edge_weight
+
+    def forward(self, x, edge_index, edge_weight: OptTensor = None,
+                batch: OptTensor = None, lambda_max: OptTensor = None):
+        """"""
+        if self.normalization != 'sym' and lambda_max is None:
+            raise ValueError('You need to pass `lambda_max` to `forward() in`'
+                             'case the normalization is non-symmetric.')
+
+        if lambda_max is None:
+            lambda_max = torch.tensor(2.0, dtype=x.dtype, device=x.device)
+        if not isinstance(lambda_max, torch.Tensor):
+            lambda_max = torch.tensor(lambda_max, dtype=x.dtype,
+                                      device=x.device)
+        assert lambda_max is not None
+
+        num_nodes=x.size(self.node_dim)
+        edge_index, edge_weight = remove_self_loops(edge_index, edge_weight)
+        edge_index, edge_weight = add_self_loops(edge_index, edge_weight,
+                                                 fill_value=-1.,
+                                                 num_nodes=num_nodes)
+
+        edge_index, norm = self.__norm__(edge_index, x.size(self.node_dim),
+                                         edge_weight, self.normalization,
+                                         lambda_max, dtype=x.dtype,
+                                         batch=batch)
+
+        Tx_0 = x
+        Tx_1 = x  # Dummy.
+        out = [torch.mm(Tx_0,self.weight[:self.in_channels,:self.hidden])]
+        # propagate_type: (x: Tensor, norm: Tensor)
+        if self.K> 1:
+            Tx_1 = self.propagate(edge_index, x=x, norm=norm, size=None)
+            # out = out + torch.matmul(Tx_1, self.weight[1])
+            out.append(torch.mm(Tx_1,self.weight[self.in_channels:2*self.in_channels,self.hidden:2*self.hidden]))
+
+        for k in range(2, self.K):
+            Tx_2 = self.propagate(edge_index, x=Tx_1, norm=norm, size=None)
+            # out = out + torch.matmul(Tx_2, self.weight[k])
+            if k<self.K-1:
+                out.append(torch.mm(Tx_2,self.weight[k*self.in_channels:(k+1)*self.in_channels,k*self.hidden:(k+1)*self.hidden]))
+            else:
+                out.append(torch.mm(Tx_2,self.weight[k*self.in_channels:,k*self.hidden:]))
+            Tx_1 = Tx_2
+
+        out=torch.cat(out,dim=1)
+        return out,None
+
+    def message(self, x_j, norm):
+        return norm.view(-1, 1) * x_j
+
+    def __repr__(self):
+        return '{}({}, {}, K={}, normalization={})'.format(
+            self.__class__.__name__, self.in_channels, self.out_channels,
+            self.weight.size(0), self.normalization)
+
 class LiCheb(MessagePassing):
     def __init__(self, in_channels, out_channels, K, normalization='sym',
                  bias=True,decoupled=True, **kwargs):
@@ -416,6 +517,261 @@ class LiCheb(MessagePassing):
         return '{}({}, {}, K={}, normalization={})'.format(
             self.__class__.__name__, self.in_channels, self.out_channels,
             self.weight.size(0), self.normalization)
+
+# class LiCheb(MessagePassing):
+#     def __init__(self, in_channels, out_channels, K, normalization='sym',
+#                  bias=True,decoupled=True, **kwargs):
+#         super(LiCheb, self).__init__(aggr='add', **kwargs)
+
+#         assert K > 0
+#         assert normalization in [None, 'sym', 'rw'], 'Invalid normalization'
+
+#         self.in_channels = in_channels
+#         self.out_channels = out_channels
+#         self.normalization = normalization
+#         self.K=K
+#         self.decoupled=decoupled
+#         self.fc = Linear(in_channels,out_channels)
+#         self.att_w = Parameter(torch.Tensor(K, out_channels))
+#         self.att_bias = Parameter(torch.Tensor(out_channels))
+#         self.node_att = nn.Linear(K*out_channels,1)
+#         self.edge_att = nn.Linear(K*out_channels*2,1)
+#         self.reset_parameters()
+
+#     def reset_parameters(self):
+#         # glorot(self.weight)
+#         # zeros(self.bias)
+#         glorot(self.att_w)
+#         zeros(self.att_bias)
+
+#     def __norm__(self, edge_index, num_nodes: Optional[int],
+#                  edge_weight: OptTensor, normalization: Optional[str],
+#                  lambda_max, dtype: Optional[int] = None,
+#                  batch: OptTensor = None):
+
+#         edge_index, edge_weight = remove_self_loops(edge_index, edge_weight)
+
+#         edge_index, edge_weight = get_laplacian(edge_index, edge_weight,
+#                                                 normalization, dtype,
+#                                                 num_nodes)
+
+#         if batch is not None and lambda_max.numel() > 1:
+#             lambda_max = lambda_max[batch[edge_index[0]]]
+
+#         edge_weight = (2.0 * edge_weight) / lambda_max
+#         edge_weight.masked_fill_(edge_weight == float('inf'), 0)
+
+#         edge_index, edge_weight = add_self_loops(edge_index, edge_weight,
+#                                                  fill_value=-1.,
+#                                                  num_nodes=num_nodes)
+#         assert edge_weight is not None
+
+#         return edge_index, edge_weight
+
+    # def forward(self, x, edge_index, edge_weight: OptTensor = None,
+    #             batch: OptTensor = None, lambda_max: OptTensor = None):
+    #     """"""
+    #     if self.normalization != 'sym' and lambda_max is None:
+    #         raise ValueError('You need to pass `lambda_max` to `forward() in`'
+    #                          'case the normalization is non-symmetric.')
+
+    #     if lambda_max is None:
+    #         lambda_max = torch.tensor(2.0, dtype=x.dtype, device=x.device)
+    #     if not isinstance(lambda_max, torch.Tensor):
+    #         lambda_max = torch.tensor(lambda_max, dtype=x.dtype,
+    #                                   device=x.device)
+    #     assert lambda_max is not None
+
+    #     edge_index, norm = self.__norm__(edge_index, x.size(self.node_dim),
+    #                                      edge_weight, self.normalization,
+    #                                      lambda_max, dtype=x.dtype,
+    #                                      batch=batch)
+
+    #     x=self.fc(x)
+    #     Tx_0 = x
+    #     Tx_1 = x  # Dummy.
+    #     out = [Tx_0]
+
+    #     # propagate_type: (x: Tensor, norm: Tensor)
+    #     if self.K > 1:
+    #         Tx_1 = self.propagate(edge_index, x=x, norm=norm, size=None)
+    #         out.append(Tx_1)
+
+    #     for k in range(2, self.K):
+    #         Tx_2 = self.propagate(edge_index, x=Tx_1, norm=norm, size=None)
+    #         Tx_2 = 2. * Tx_2 - Tx_0
+    #         out.append(Tx_2)
+    #         Tx_0, Tx_1 = Tx_1, Tx_2
+
+    #     out=torch.stack(out)
+
+    #     ## for importance score
+    #     out2=out.permute(1,0,2).contiguous().view(-1,self.K*self.out_channels)
+    #     node_score=self.node_att(out2)
+    #     # row,col=edge_index
+    #     # edge_score = self.edge_att(torch.cat([out2[row],out2[col]],dim=1))
+        
+    #     out=torch.sum(self.att_w.view(self.K,1,self.out_channels)*out,dim=0)+self.att_bias.view(1,self.out_channels)
+    #     if self.decoupled:
+    #         out=out/torch.norm(out,dim=1,keepdim=True)
+    #     out=out*node_score
+
+    #     return out,node_score
+
+    # def forward(self, x, edge_index, edge_weight: OptTensor = None,
+    #             batch: OptTensor = None, lambda_max: OptTensor = None):
+    #     """"""
+    #     if self.normalization != 'sym' and lambda_max is None:
+    #         raise ValueError('You need to pass `lambda_max` to `forward() in`'
+    #                          'case the normalization is non-symmetric.')
+
+    #     if lambda_max is None:
+    #         lambda_max = torch.tensor(2.0, dtype=x.dtype, device=x.device)
+    #     if not isinstance(lambda_max, torch.Tensor):
+    #         lambda_max = torch.tensor(lambda_max, dtype=x.dtype,
+    #                                   device=x.device)
+    #     assert lambda_max is not None
+
+    #     edge_index, norm = self.__norm__(edge_index, x.size(self.node_dim),
+    #                                      edge_weight, self.normalization,
+    #                                      lambda_max, dtype=x.dtype,
+    #                                      batch=batch)
+
+    #     x=self.fc(x)
+    #     Tx_0 = x
+    #     Tx_1 = x  # Dummy.
+    #     out = [Tx_0]
+
+    #     # propagate_type: (x: Tensor, norm: Tensor)
+    #     if self.K > 1:
+    #         Tx_1 = self.propagate(edge_index, x=x, norm=norm, size=None)
+    #         out.append(Tx_1)
+
+    #     for k in range(2, self.K):
+    #         Tx_2 = self.propagate(edge_index, x=Tx_1, norm=norm, size=None)
+    #         Tx_2 = 2. * Tx_2 - Tx_0
+    #         out.append(Tx_2)
+    #         Tx_0, Tx_1 = Tx_1, Tx_2
+
+    #     out=torch.stack(out)
+
+    #     ## for importance score
+    #     neighbor_info=out.permute(1,0,2).contiguous().view(-1,self.K*self.out_channels)
+    #     out=torch.sum(self.att_w.view(self.K,1,self.out_channels)*out,dim=0)+self.att_bias.view(1,self.out_channels)
+    #     if self.decoupled:
+    #         out=out/torch.norm(out,dim=1,keepdim=True)
+
+    #     return out,neighbor_info
+
+    # def message(self, x_j, norm):
+    #     return norm.view(-1, 1) * x_j
+
+    # def __repr__(self):
+    #     return '{}({}, {}, K={}, normalization={})'.format(
+    #         self.__class__.__name__, self.in_channels, self.out_channels,
+    #         self.weight.size(0), self.normalization)
+
+class LiMixhop(MessagePassing):
+    def __init__(self, in_channels, out_channels, K, normalization='sym',
+                 bias=True,decoupled=True, **kwargs):
+        super(LiMixhop, self).__init__(aggr='add', **kwargs)
+
+        assert K > 0
+        assert normalization in [None, 'sym', 'rw'], 'Invalid normalization'
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.normalization = normalization
+        self.K=K
+        self.decoupled=decoupled
+        self.fc = Linear(in_channels,out_channels)
+        self.att_w = Parameter(torch.Tensor(K, out_channels))
+        self.att_bias = Parameter(torch.Tensor(out_channels))
+        self.node_att = nn.Linear(K*out_channels,1)
+        self.edge_att = nn.Linear(K*out_channels*2,1)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        glorot(self.att_w)
+        zeros(self.att_bias)
+
+    def __norm__(self, edge_index, num_nodes: Optional[int],
+                 edge_weight: OptTensor, normalization: Optional[str],
+                 lambda_max, dtype: Optional[int] = None,
+                 batch: OptTensor = None):
+
+        row, col = edge_index[0], edge_index[1]
+        edge_weight = torch.ones(row.shape[0],device=row.device)
+        deg = scatter_add(edge_weight, row, dim=0, dim_size=num_nodes)
+
+        # Compute A_norm = -D^{-1/2} A D^{-1/2}.
+        deg_inv_sqrt = deg.pow_(-0.5)
+        deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float('inf'), 0)
+        edge_weight = deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
+
+        assert edge_weight is not None
+
+        return edge_index, edge_weight
+
+    def forward(self, x, edge_index, edge_weight: OptTensor = None,
+                batch: OptTensor = None, lambda_max: OptTensor = None):
+        """"""
+        if self.normalization != 'sym' and lambda_max is None:
+            raise ValueError('You need to pass `lambda_max` to `forward() in`'
+                             'case the normalization is non-symmetric.')
+
+        if lambda_max is None:
+            lambda_max = torch.tensor(2.0, dtype=x.dtype, device=x.device)
+        if not isinstance(lambda_max, torch.Tensor):
+            lambda_max = torch.tensor(lambda_max, dtype=x.dtype,
+                                      device=x.device)
+        assert lambda_max is not None
+
+        num_nodes=x.size(self.node_dim)
+        edge_index, edge_weight = remove_self_loops(edge_index, edge_weight)
+        edge_index, edge_weight = add_self_loops(edge_index, edge_weight,
+                                                 fill_value=-1.,
+                                                 num_nodes=num_nodes)
+
+        edge_index, norm = self.__norm__(edge_index, x.size(self.node_dim),
+                                         edge_weight, self.normalization,
+                                         lambda_max, dtype=x.dtype,
+                                         batch=batch)
+
+        x=self.fc(x)
+        Tx_0 = x
+        Tx_1 = x  # Dummy.
+        out = [Tx_0]
+
+        # propagate_type: (x: Tensor, norm: Tensor)
+        if self.K > 1:
+            Tx_1 = self.propagate(edge_index, x=x, norm=norm, size=None)
+            out.append(Tx_1)
+
+        for k in range(2, self.K):
+            Tx_2 = self.propagate(edge_index, x=Tx_1, norm=norm, size=None)
+            out.append(Tx_2)
+            Tx_1 = Tx_2
+
+        out=torch.stack(out)
+
+        ## for importance score
+        neighbor_info=out.permute(1,0,2).contiguous().view(-1,self.K*self.out_channels)
+        out=torch.sum(self.att_w.view(self.K,1,self.out_channels)*out,dim=0)+self.att_bias.view(1,self.out_channels)
+        if self.decoupled:
+            out=out/torch.norm(out,dim=1,keepdim=True)
+
+        return out,neighbor_info
+
+    def message(self, x_j, norm):
+        return norm.view(-1, 1) * x_j
+
+    def __repr__(self):
+        return '{}({}, {}, K={}, normalization={})'.format(
+            self.__class__.__name__, self.in_channels, self.out_channels,
+            self.weight.size(0), self.normalization)
+
+
 
 
 from torch_sparse import spspmm, coalesce

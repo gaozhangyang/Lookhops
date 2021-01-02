@@ -3,6 +3,7 @@ import glob
 import os
 import time
 from time import sleep
+from nni.trial import report_final_result
 
 import numpy as np
 import random
@@ -85,7 +86,7 @@ def get_args():
     ############# system params ##############
     parser.add_argument('--seed', type=int, default=11, help='random seed')
     parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
-    parser.add_argument('--epochs', type=int, default=500, help='maximum number of epochs')
+    parser.add_argument('--epochs', type=int, default=50, help='maximum number of epochs')
     parser.add_argument('--patience', type=int, default=30, help='patience for early stopping')
     parser.add_argument('--ex_name',default='debug')
 
@@ -101,9 +102,9 @@ def get_args():
     parser.add_argument('--decoupled',default=False)
 
     ############## experiments ###############
-    parser.add_argument('--dataset', type=str, default='NCI1', help='DD/PROTEINS/NCI1/NCI109/Mutagenicity/ENZYMES/FRANKENSTEIN')
-    parser.add_argument('--conv',default='LiCheb',help='GCN/ChebConv/GAT/LiCheb/LiMixhop/Mixhop/AttConv')
-    parser.add_argument('--pool',default='LookHops',help='NoPool/TopkPool/SAGPool/EdgePool/ASAPPool/LookHops')
+    parser.add_argument('--dataset', type=str, default='DD', help='DD/PROTEINS/NCI1/NCI109/Mutagenicity/ENZYMES/FRANKENSTEIN')
+    parser.add_argument('--conv',default='Mixhop',help='GCN/ChebConv/GAT/LiCheb/LiMixhop/Mixhop/AttConv')
+    parser.add_argument('--pool',default='NoPool',help='NoPool/TopkPool/SAGPool/EdgePool/ASAPPool/LookHops')
     args = parser.parse_args(args=[])
     return args
 
@@ -117,6 +118,7 @@ def train():
     best_epoch = 0
 
     t = time.time()
+    print(count_parameters(model)/1000)
     model.train()
     step=0
     for epoch in range(args.epochs):
@@ -136,58 +138,59 @@ def train():
             loss_train += loss.item()
             pred = out.max(dim=1)[1]
             correct += pred.eq(data.y).sum().item()
+        nni.report_intermediate_result((time.time()-t))
 
-    # t2=time.time()
-    # print(count_parameters(model))
-    # print('{:.2f}'.format((t2-t)/10))
-    # print()
-        acc_train = correct / len(train_loader.dataset)
-        acc_val, loss_val = compute_test(val_loader)
+    t2=time.time()
+    time_cost=(t2-t)
+    print('{:.2f}'.format(time_cost))
+    nni.report_final_result(time_cost) 
+    #     acc_train = correct / len(train_loader.dataset)
+    #     acc_val, loss_val = compute_test(val_loader)
 
-        # # client_send(gpuid, 1)
-        # # if epoch>5:
-        # #     client_send(gpuid, 1)
+    #     # # client_send(gpuid, 1)
+    #     # # if epoch>5:
+    #     # #     client_send(gpuid, 1)
 
-        outs='Epoch: {:04d}'.format(epoch + 1)+'\tloss_train: {:.6f}'.format(loss_train)+\
-              '\tacc_train: {:.6f}'.format(acc_train)+ '\tloss_val: {:.6f}'.format(loss_val)+\
-              '\tacc_val: {:.6f}'.format(acc_val)+'\ttime: {:.6f}s'.format(time.time() - t)
-        nni.report_intermediate_result(-loss_val) 
-        print(outs)
-        logging.info(outs)
+    #     outs='Epoch: {:04d}'.format(epoch + 1)+'\tloss_train: {:.6f}'.format(loss_train)+\
+    #           '\tacc_train: {:.6f}'.format(acc_train)+ '\tloss_val: {:.6f}'.format(loss_val)+\
+    #           '\tacc_val: {:.6f}'.format(acc_val)+'\ttime: {:.6f}s'.format(time.time() - t)
+    #     nni.report_intermediate_result(-loss_val) 
+    #     print(outs)
+    #     logging.info(outs)
 
-        val_loss_values.append(loss_val)
-        val_acc_values.append(acc_val)
-        torch.save(model.state_dict(), res/'{}.pth'.format(epoch))
-        if val_loss_values[-1] < min_loss:
-            min_loss = val_loss_values[-1]
-            best_epoch = epoch
-            patience_cnt = 0
-        else:
-            patience_cnt += 1
+    #     val_loss_values.append(loss_val)
+    #     val_acc_values.append(acc_val)
+    #     torch.save(model.state_dict(), res/'{}.pth'.format(epoch))
+    #     if val_loss_values[-1] < min_loss:
+    #         min_loss = val_loss_values[-1]
+    #         best_epoch = epoch
+    #         patience_cnt = 0
+    #     else:
+    #         patience_cnt += 1
 
-        # if val_acc_values[-1] > max_acc:
-        #     max_acc = val_acc_values[-1]
-        #     best_epoch=epoch
-        #     patience_cnt = 0
-        # else:
-        #     patience_cnt +=1
+    #     # if val_acc_values[-1] > max_acc:
+    #     #     max_acc = val_acc_values[-1]
+    #     #     best_epoch=epoch
+    #     #     patience_cnt = 0
+    #     # else:
+    #     #     patience_cnt +=1
 
-        if patience_cnt == args.patience:
-            break
+    #     if patience_cnt == args.patience:
+    #         break
 
-        files = glob.glob(res.as_posix()+'/*.pth')
-        for f in files:
-            epoch_nb = int(f.split('/')[-1].split('.')[0])
-            if epoch_nb < best_epoch:
-                os.remove(f)
+    #     files = glob.glob(res.as_posix()+'/*.pth')
+    #     for f in files:
+    #         epoch_nb = int(f.split('/')[-1].split('.')[0])
+    #         if epoch_nb < best_epoch:
+    #             os.remove(f)
 
-    files = glob.glob(res.as_posix()+'/*.pth')
-    for f in files:
-        epoch_nb = int(f.split('/')[-1].split('.')[0])
-        if epoch_nb > best_epoch:
-            os.remove(f)
-    outs='Optimization Finished! Total time elapsed: {:.6f}'.format(time.time() - t)
-    print(outs)
+    # files = glob.glob(res.as_posix()+'/*.pth')
+    # for f in files:
+    #     epoch_nb = int(f.split('/')[-1].split('.')[0])
+    #     if epoch_nb > best_epoch:
+    #         os.remove(f)
+    # outs='Optimization Finished! Total time elapsed: {:.6f}'.format(time.time() - t)
+    # print(outs)
 
     return best_epoch
 
@@ -269,10 +272,3 @@ if __name__ == '__main__':
 
     # Model training
     best_model = train()
-    # Restore best model for test set
-    model.load_state_dict(torch.load(res/'{}.pth'.format(best_model)))
-    test_acc, test_loss = compute_test(test_loader)
-    outs='Test set results, loss = {:.6f}, accuracy = {:.6f}'.format(test_loss, test_acc)
-    print(outs)
-    logging.info(outs)
-    nni.report_final_result(test_acc)
