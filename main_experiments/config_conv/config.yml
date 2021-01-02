@@ -8,7 +8,7 @@ maxExecDuration: 12h
 maxTrialNum: 500
 #choice: local, remote, pai
 trainingServicePlatform: local
-searchSpacePath: search_space_timecost.json
+searchSpacePath: search_space.json
 #choice: true, false
 useAnnotation: false
 
