@@ -1,0 +1,28 @@
+# nnictl experiment export ssY3qqgD -f ./csv/Enz.csv --type "csv"
+
+authorName: Zhangyang Gao
+experimentName: ex_DD
+debug: True
+trialConcurrency: 10
+maxExecDuration: 12h
+maxTrialNum: 500
+#choice: local, remote, pai
+trainingServicePlatform: local
+searchSpacePath: search_space_timecost.json
+#choice: true, false
+useAnnotation: false
+
+tuner:
+  #choice: TPE, Random, Anneal, Evolution, BatchTuner, MetisTuner, GPTuner
+  #SMAC (SMAC should be installed through nnictl)
+  builtinTunerName: BatchTuner
+
+trial:
+  command: python main_evaltime.py 
+  codeDir: ../
+  gpuNum: 1
+
+localConfig:
+  gpuIndices: "0"
+  maxTrialNumPerGpu: 10
+  useActiveGpu: False

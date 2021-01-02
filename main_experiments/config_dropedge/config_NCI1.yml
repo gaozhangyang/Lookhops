@@ -1,0 +1,27 @@
+authorName: Zhangyang Gao
+experimentName: ex_NCI1
+debug: True
+trialConcurrency: 20
+maxExecDuration: 12h
+maxTrialNum: 100
+#choice: local, remote, pai
+trainingServicePlatform: local
+searchSpacePath: search_space_NCI1.json
+#choice: true, false
+useAnnotation: false
+
+tuner:
+  #choice: TPE, Random, Anneal, Evolution, BatchTuner, MetisTuner, GPTuner
+  #SMAC (SMAC should be installed through nnictl)
+  builtinTunerName: BatchTuner
+
+
+trial:
+  command: python main.py 
+  codeDir: ../
+  gpuNum: 1
+
+localConfig:
+  gpuIndices: "7,2"
+  maxTrialNumPerGpu: 10
+  useActiveGpu: False

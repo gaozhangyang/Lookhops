@@ -1,0 +1,27 @@
+authorName: Zhangyang Gao
+experimentName: ex_PROTEINS
+debug: True
+trialConcurrency: 30
+maxExecDuration: 12h
+maxTrialNum: 500
+#choice: local, remote, pai
+trainingServicePlatform: local
+searchSpacePath: search_space_ablation.json
+#choice: true, false
+useAnnotation: false
+
+tuner:
+  #choice: TPE, Random, Anneal, Evolution, BatchTuner, MetisTuner, GPTuner
+  #SMAC (SMAC should be installed through nnictl)
+  builtinTunerName: BatchTuner
+
+
+trial:
+  command: python main.py 
+  codeDir: ../
+  gpuNum: 1
+
+localConfig:
+  gpuIndices: 0,1,3
+  maxTrialNumPerGpu: 10
+  useActiveGpu: False
