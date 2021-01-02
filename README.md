@@ -1,6 +1,6 @@
 # GraghPool
 
-pytorch version of `LookHops: light multi-order convolution and pooling for graph classification`
+the pytorch version of `LookHops: light multi-order convolution and pooling for graph classification`
 
 
 ```
